@@ -3,7 +3,7 @@ const router = express.Router();
 const passport = require("passport");
 
 const User = require("../models/user");
-const { saveRedirectUrl } = require("../middleware");
+const { saveRedirectUrl } = require("../middlewares");
 
 router.get("/signup", (req, res) => {
   res.render("users/signup");

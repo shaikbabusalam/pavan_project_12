@@ -4,7 +4,7 @@ const multer = require("multer");
 const mbxGeocoding = require("@mapbox/mapbox-sdk/services/geocoding");
 
 const Listing = require("../models/listing");
-const { isLoggedIn, isOwner } = require("../middleware");
+const { isLoggedIn, isOwner } = require("../middlewares.js");
 const { listingSchema } = require("../schema");
 const { storage } = require("../cloudConfig");
 

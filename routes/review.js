@@ -3,7 +3,7 @@ const router = express.Router({ mergeParams: true });
 
 const Listing = require("../models/listing");
 const Review = require("../models/review");
-const { isLoggedIn } = require("../middleware");
+const { isLoggedIn } = require("../middlewares");
 const { reviewSchema } = require("../schema");
 
 const validateReview = (req, res, next) => {
