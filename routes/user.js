@@ -23,7 +23,15 @@ router.post("/signup", async (req, res, next) => {
       res.redirect("/listings");
     });
   } catch (err) {
-    req.flash("error", err.message);
+    let msg = err.message;
+    if (err.code === 11000 || err.name === "UserExistsError") {
+      if (err.keyPattern && err.keyPattern.email) {
+        msg = "That email is already registered. Please log in instead.";
+      } else {
+        msg = "That username is already taken. Please choose another or log in.";
+      }
+    }
+    req.flash("error", msg);
     res.redirect("/signup");
   }
 });
