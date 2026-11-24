@@ -1,10 +1,5 @@
 <% layout("layouts/boilerplate") %>
 
-<script>
-  const mapToken = "<%= mapToken %>";
-  const coordinates = <%- JSON.stringify(listing.geometry && listing.geometry.coordinates ? listing.geometry.coordinates : [79.9865, 14.4426]) %>;
-</script>
-
 <div class="row mt-3">
   <div class="col-md-8 offset-md-2">
     <h4><b><%= listing.title %></b></h4>
@@ -84,10 +79,126 @@
     <% } %>
   </div>
 
-  <div class="col-md-8 offset-md-2 mb-3">
+  <div class="col-md-8 offset-md-2 mb-4">
     <h3>Where you'll be</h3>
-    <div id="map"></div>
+    <div
+      id="map"
+      style="height: 400px; width: 100%; border-radius: 1rem; overflow: hidden; background: #e9ecef; border: 1px solid #dee2e6;"
+    ></div>
   </div>
 </div>
 
-<script src="/js/map.js"></script>
+<script>
+  (async function () {
+    const mapContainer = document.getElementById("map");
+    if (!mapContainer) return;
+
+    const token = "<%= typeof mapToken !== 'undefined' ? mapToken : '' %>";
+    const listingTitle = <%- JSON.stringify(listing.title || "Listing Location") %>;
+    const listingPlace = <%- JSON.stringify([listing.location, listing.country].filter(Boolean).join(", ")) %>;
+    const savedCoords = <%- JSON.stringify(listing.geometry && Array.isArray(listing.geometry.coordinates) && listing.geometry.coordinates.length === 2 ? listing.geometry.coordinates : [0, 0]) %>;
+
+    // 1. Resolve [lng, lat] coordinates (geocode via OpenStreetMap if saved coords are [0, 0])
+    let coords = [79.9865, 14.4426]; // Default fallback [lng, lat]
+    if (
+      Array.isArray(savedCoords) &&
+      savedCoords.length === 2 &&
+      (Number(savedCoords[0]) !== 0 || Number(savedCoords[1]) !== 0)
+    ) {
+      coords = [Number(savedCoords[0]), Number(savedCoords[1])];
+    } else if (listingPlace) {
+      try {
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(listingPlace)}`
+        );
+        const geoData = await geoRes.json();
+        if (Array.isArray(geoData) && geoData.length > 0) {
+          coords = [parseFloat(geoData[0].lon), parseFloat(geoData[0].lat)];
+        }
+      } catch (_) {}
+    }
+
+    const [lng, lat] = coords;
+
+    // Guaranteed iframe fallback if external JS map libraries are blocked
+    function renderIframeFallback() {
+      const delta = 0.08;
+      const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
+      mapContainer.innerHTML = `<iframe
+        title="Location Map"
+        width="100%"
+        height="400"
+        frameborder="0"
+        scrolling="no"
+        src="https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat},${lng}"
+        style="border: 0; display: block;"
+      ></iframe>`;
+    }
+
+    // Load Leaflet + OpenStreetMap dynamically
+    function renderLeafletMap() {
+      if (!document.querySelector('link[href*="leaflet.css"]')) {
+        const css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(css);
+      }
+
+      const mountLeaflet = () => {
+        try {
+          mapContainer.innerHTML = "";
+          const leafletMap = L.map("map").setView([lat, lng], 10);
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "&copy; OpenStreetMap contributors",
+          }).addTo(leafletMap);
+          L.marker([lat, lng])
+            .addTo(leafletMap)
+            .bindPopup(`<b>${listingTitle}</b><br>${listingPlace}`)
+            .openPopup();
+        } catch (_) {
+          renderIframeFallback();
+        }
+      };
+
+      if (typeof L !== "undefined") {
+        mountLeaflet();
+      } else {
+        const script = document.createElement("script");
+        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+        script.onload = mountLeaflet;
+        script.onerror = renderIframeFallback;
+        document.head.appendChild(script);
+      }
+    }
+
+    // 2. Verify MAP_TOKEN before using Mapbox so an expired token never renders a blank canvas
+    if (token) {
+      try {
+        const checkRes = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/India.json?access_token=${encodeURIComponent(token)}&limit=1`
+        );
+        if (checkRes.ok && typeof mapboxgl !== "undefined") {
+          mapboxgl.accessToken = token;
+          const map = new mapboxgl.Map({
+            container: "map",
+            style: "mapbox://styles/mapbox/streets-v12",
+            center: [lng, lat],
+            zoom: 9,
+          });
+          map.addControl(new mapboxgl.NavigationControl());
+          new mapboxgl.Marker({ color: "#fe424d" })
+            .setLngLat([lng, lat])
+            .addTo(map);
+          map.on("error", () => {
+            try { map.remove(); } catch (_) {}
+            renderLeafletMap();
+          });
+          return;
+        }
+      } catch (_) {}
+    }
+
+    // 3. Render OpenStreetMap when MAP_TOKEN is expired or missing
+    renderLeafletMap();
+  })();
+</script>

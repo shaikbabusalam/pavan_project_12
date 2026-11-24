@@ -12,6 +12,43 @@ const upload = multer({ storage });
 const mapToken = process.env.MAP_TOKEN;
 const geocodingClient = mapToken ? mbxGeocoding({ accessToken: mapToken }) : null;
 
+async function geocodeLocation(location, country) {
+  const queryText = [location, country].filter(Boolean).join(", ");
+  if (!queryText) return null;
+
+  if (geocodingClient) {
+    try {
+      const geoResponse = await geocodingClient
+        .forwardGeocode({ query: queryText, limit: 1 })
+        .send();
+
+      if (geoResponse.body.features && geoResponse.body.features.length > 0) {
+        return geoResponse.body.features[0].geometry;
+      }
+    } catch (err) {
+      console.error("Mapbox geocoding skipped:", err.message);
+    }
+  }
+
+  try {
+    const osmRes = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(queryText)}`,
+      { headers: { "User-Agent": "WanderlustApp/1.0" } }
+    );
+    const osmData = await osmRes.json();
+    if (Array.isArray(osmData) && osmData.length > 0) {
+      return {
+        type: "Point",
+        coordinates: [parseFloat(osmData[0].lon), parseFloat(osmData[0].lat)],
+      };
+    }
+  } catch (err) {
+    console.error("OSM geocoding fallback skipped:", err.message);
+  }
+
+  return null;
+}
+
 const validateListing = (req, res, next) => {
   const { error } = listingSchema.validate(req.body);
   if (error) {
@@ -60,21 +97,12 @@ router.post(
       };
     }
 
-    if (geocodingClient && req.body.listing.location) {
-      try {
-        const geoResponse = await geocodingClient
-          .forwardGeocode({
-            query: req.body.listing.location,
-            limit: 1,
-          })
-          .send();
-
-        if (geoResponse.body.features && geoResponse.body.features.length > 0) {
-          newListing.geometry = geoResponse.body.features[0].geometry;
-        }
-      } catch (geoErr) {
-        console.error("Geocoding warning:", geoErr.message);
-      }
+    const geometry = await geocodeLocation(
+      req.body.listing.location,
+      req.body.listing.country
+    );
+    if (geometry) {
+      newListing.geometry = geometry;
     }
 
     await newListing.save();
@@ -120,11 +148,20 @@ router.put(
   validateListing,
   async (req, res) => {
     const { id } = req.params;
-    const listing = await Listing.findByIdAndUpdate(
-      id,
-      { ...req.body.listing },
-      { new: true, runValidators: true }
+    const updateData = { ...req.body.listing };
+
+    const geometry = await geocodeLocation(
+      req.body.listing.location,
+      req.body.listing.country
     );
+    if (geometry) {
+      updateData.geometry = geometry;
+    }
+
+    const listing = await Listing.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    });
 
     if (!listing) {
       req.flash("error", "Listing not found!");
