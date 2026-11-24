@@ -4,7 +4,7 @@ const multer = require("multer");
 const mbxGeocoding = require("@mapbox/mapbox-sdk/services/geocoding");
 
 const Listing = require("../models/listing");
-const { isLoggedIn, isOwner } = require("../middlewares.js");
+const { isLoggedIn, isOwner } = require("../middlewares");
 const { listingSchema } = require("../schema");
 const { storage } = require("../cloudConfig");
 
@@ -61,15 +61,19 @@ router.post(
     }
 
     if (geocodingClient && req.body.listing.location) {
-      const geoResponse = await geocodingClient
-        .forwardGeocode({
-          query: req.body.listing.location,
-          limit: 1,
-        })
-        .send();
+      try {
+        const geoResponse = await geocodingClient
+          .forwardGeocode({
+            query: req.body.listing.location,
+            limit: 1,
+          })
+          .send();
 
-      if (geoResponse.body.features.length > 0) {
-        newListing.geometry = geoResponse.body.features[0].geometry;
+        if (geoResponse.body.features && geoResponse.body.features.length > 0) {
+          newListing.geometry = geoResponse.body.features[0].geometry;
+        }
+      } catch (geoErr) {
+        console.error("Geocoding warning:", geoErr.message);
       }
     }
 
@@ -89,7 +93,7 @@ router.get("/:id", async (req, res) => {
     .populate("owner");
 
   if (!listing) {
-    req.flash("error", "Listing you requested does not exist!");
+    req.flash("error", "Listing you requested for does not exist!");
     return res.redirect("/listings");
   }
 

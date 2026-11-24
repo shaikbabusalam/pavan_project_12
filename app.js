@@ -62,7 +62,7 @@ app.use(async (req, res, next) => {
 const store = MongoStore.create({
   mongoUrl: dbUrl,
   crypto: {
-    secret: process.env.SECRET,
+    secret: process.env.SECRET || "fallback-dev-secret-change-in-prod",
   },
   touchAfter: 24 * 3600,
 });

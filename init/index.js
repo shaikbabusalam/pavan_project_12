@@ -1,130 +1,123 @@
-const path = require("path");
+<% layout("layouts/boilerplate") %>
 
-if (process.env.NODE_ENV !== "production") {
-  require("dotenv").config();
-}
-
-const express = require("express");
-const mongoose = require("mongoose");
-const methodOverride = require("method-override");
-const ejsMate = require("ejs-mate");
-const session = require("express-session");
-const MongoStore = require("connect-mongo");
-const flash = require("connect-flash");
-const passport = require("passport");
-const LocalStrategy = require("passport-local");
-
-const User = require("./models/user");
-const listingRouter = require("./routes/listing");
-const reviewRouter = require("./routes/review");
-const userRouter = require("./routes/user");
-
-const app = express();
-
-app.set("trust proxy", 1);
-
-app.engine("ejs", ejsMate);
-app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "views"));
-
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-app.use(methodOverride("_method"));
-app.use(express.static(path.join(__dirname, "public")));
-
-const dbUrl = process.env.ATLASDB_URL;
-
-let isConnected = false;
-async function connectDB() {
-  if (isConnected || mongoose.connection.readyState === 1) {
-    return;
+<style>
+  #filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
   }
-  if (!dbUrl) {
-    throw new Error("ATLASDB_URL environment variable is not set.");
+  .filter {
+    text-align: center;
+    margin-top: 1rem;
+    margin-right: 2rem;
+    opacity: 0.7;
+    text-decoration: none;
+    color: inherit;
   }
-  await mongoose.connect(dbUrl);
-  isConnected = true;
-}
-
-app.use(async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (err) {
-    next(err);
+  .filter:hover,
+  .filter.active {
+    opacity: 1;
+    cursor: pointer;
+    border-bottom: 2px solid #ff5733;
   }
-});
-
-const store = MongoStore.create({
-  mongoUrl: dbUrl,
-  crypto: {
-    secret: process.env.SECRET,
-  },
-  touchAfter: 24 * 3600,
-});
-
-store.on("error", (err) => {
-  console.error("ERROR IN MONGO SESSION STORE:", err);
-});
-
-const sessionOptions = {
-  store,
-  secret: process.env.SECRET || "fallback-dev-secret-change-in-prod",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  },
-};
-
-app.use(session(sessionOptions));
-app.use(flash());
-
-app.use(passport.initialize());
-app.use(passport.session());
-passport.use(new LocalStrategy(User.authenticate()));
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
-
-app.use((req, res, next) => {
-  res.locals.currUser = req.user || null;
-  res.locals.success = req.flash("success");
-  res.locals.error = req.flash("error");
-  res.locals.mapToken = process.env.MAP_TOKEN || "";
-  next();
-});
-
-app.get("/", (req, res) => {
-  res.redirect("/listings");
-});
-
-app.use("/listings", listingRouter);
-app.use("/listings/:id/reviews", reviewRouter);
-app.use("/", userRouter);
-
-app.use((req, res, next) => {
-  const err = new Error("Page Not Found");
-  err.statusCode = 404;
-  next(err);
-});
-
-app.use((err, req, res, next) => {
-  const { statusCode = 500, message = "Something went wrong!" } = err;
-  if (res.headersSent) {
-    return next(err);
+  .filter p {
+    font-size: 0.8rem;
   }
-  res.status(statusCode).render("error", { statusCode, message, err });
-});
+  .filter .fa-solid {
+    color: #ff5733;
+    font-size: 24px;
+  }
+  .tax-info {
+    display: none;
+  }
+  .tax-toggle {
+    border: 1px solid #ccc;
+    border-radius: 12px;
+    height: 3.25rem;
+    padding: 1rem;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+</style>
 
-if (require.main === module) {
-  const port = process.env.PORT || 8080;
-  app.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
+<div id="filters">
+  <a href="/listings?category=Trending" class="filter <%= category === 'Trending' ? 'active' : '' %>">
+    <div><i class="fa-solid fa-fire"></i></div>
+    <p>Trending</p>
+  </a>
+  <a href="/listings?category=Rooms" class="filter <%= category === 'Rooms' ? 'active' : '' %>">
+    <div><i class="fa-solid fa-bed"></i></div>
+    <p>Rooms</p>
+  </a>
+  <a href="/listings?category=Iconic cities" class="filter <%= category === 'Iconic cities' ? 'active' : '' %>">
+    <div><i class="fa-solid fa-mountain-city"></i></div>
+    <p>Iconic cities</p>
+  </a>
+  <a href="/listings?category=Castles" class="filter <%= category === 'Castles' ? 'active' : '' %>">
+    <div><i class="fa-solid fa-chess-rook"></i></div>
+    <p>Castles</p>
+  </a>
+  <a href="/listings?category=Amazing-pools" class="filter <%= category === 'Amazing-pools' ? 'active' : '' %>">
+    <div><i class="fa-solid fa-person-swimming"></i></div>
+    <p>Amazing-pools</p>
+  </a>
+  <a href="/listings?category=Camping" class="filter <%= category === 'Camping' ? 'active' : '' %>">
+    <div><i class="fa-solid fa-campground"></i></div>
+    <p>Camping</p>
+  </a>
+  <a href="/listings?category=Farms" class="filter <%= category === 'Farms' ? 'active' : '' %>">
+    <div><i class="fa-solid fa-wheat-awn"></i></div>
+    <p>Farms</p>
+  </a>
+  <a href="/listings?category=Arctic" class="filter <%= category === 'Arctic' ? 'active' : '' %>">
+    <div><i class="fa-solid fa-snowflake"></i></div>
+    <p>Arctic</p>
+  </a>
+  <a href="/listings?category=Domes" class="filter <%= category === 'Domes' ? 'active' : '' %>">
+    <div><i class="fa-solid fa-igloo"></i></div>
+    <p>Domes</p>
+  </a>
+  <a href="/listings?category=Boat" class="filter <%= category === 'Boat' ? 'active' : '' %>">
+    <div><i class="fa-solid fa-ship"></i></div>
+    <p>Boat</p>
+  </a>
+
+  <div class="tax-toggle">
+    <div class="form-check-reverse form-switch">
+      <input class="form-check-input" type="checkbox" role="switch" id="switchCheckDefault" />
+      <label class="form-check-label" for="switchCheckDefault">Display total after taxes</label>
+    </div>
+  </div>
+</div>
+
+<div class="row row-cols-lg-3 row-cols-md-2 row-cols-sm-1 mt-3">
+  <% for (let listing of allListings) { %>
+    <a href="/listings/<%= listing._id %>" class="listing-link">
+      <div class="card col listing-card">
+        <img src="<%= listing.image.url %>" class="card-img-top" alt="listing_image" style="height: 20rem;" />
+        <div class="card-img-overlay"></div>
+        <div class="card-body">
+          <p class="card-text">
+            <b><%= listing.title %></b>
+          </p>
+          <p class="card-text">
+            &#8377; <%= (listing.price || 0).toLocaleString("en-IN") %> / night
+            <i class="tax-info"> &nbsp; &nbsp; +18% GST</i>
+          </p>
+        </div>
+      </div>
+    </a>
+  <% } %>
+</div>
+
+<script>
+  const taxSwitch = document.getElementById("switchCheckDefault");
+  taxSwitch.addEventListener("click", () => {
+    const taxInfo = document.getElementsByClassName("tax-info");
+    for (const info of taxInfo) {
+      info.style.display = info.style.display !== "inline" ? "inline" : "none";
+    }
   });
-}
-
-module.exports = app;
+</script>
